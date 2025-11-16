@@ -3,9 +3,10 @@
     "target": "es6",
     "module": "commonjs",
     "strict": true,
-    "esModuleInterop": true,
+    "noImplicitAny": false,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": false,
     "outDir": "./dist",
     "rootDir": "./src",
     "resolveJsonModule": true,
@@ -15,6 +16,6 @@
     },
     "typeRoots": ["./types", "./node_modules/@types"]
   },
-  "include": ["node","src", "types"],
+  "include": ["src", "types"],
   "exclude": ["node_modules", "dist", "**/*.spec.ts"]
 }
