@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nodemon src/server.ts",
     "build": "tsc",
+    "lint": "tsc --noEmit",
     "start": "node dist/server.js"
   },
   "dependencies": {

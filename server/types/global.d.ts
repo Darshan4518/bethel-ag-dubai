@@ -1,0 +1,14 @@
+declare module "multer";
+declare module "bcryptjs";
+declare module "compression";
+declare module "jsonwebtoken";
+declare module "nodemailer";
+declare module "cors"
+declare module "morgan";
+declare module "express-rate-limit";
+declare module "helmet"
+declare module "xss-clean";
+declare module "hpp"
+declare module "cookie-parser";
+declare module "express-validator";
+declare module "dotenv"
