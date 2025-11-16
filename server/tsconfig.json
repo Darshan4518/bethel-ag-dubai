@@ -13,6 +13,8 @@
     "paths": {
       "@/*": ["*"]
     },
+
+    "types": ["node", "express", "cors", "morgan", "compression", "jsonwebtoken", "multer", "bcryptjs", "nodemailer"],
     "typeRoots": ["./types", "./node_modules/@types"]
   },
   "include": ["src", "types"],

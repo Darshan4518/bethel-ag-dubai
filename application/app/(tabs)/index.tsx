@@ -6,11 +6,12 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Image,
   RefreshControl,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { Image } from "expo-image";
+
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInRight, FadeInDown } from 'react-native-reanimated';
