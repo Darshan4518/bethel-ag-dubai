@@ -70,7 +70,7 @@ const eventStorage = new CloudinaryStorage({
   },
 });
 
-const fileFilter = (req: any, file: Express.Multer.File, cb: any) => {
+const fileFilter = (req: any, file: any, cb: any) => {
   const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
   
   if (allowedMimes.includes(file.mimetype)) {
