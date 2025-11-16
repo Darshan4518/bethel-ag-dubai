@@ -1,15 +1,31 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependencies
 node_modules/
+application/node_modules/
+server/node_modules/
 
+# Expo
+application/.expo/
+application/.expo-shared/
+
+# Secrets
+secrets/
+*.pem
+*.p8
+*.p12
+*.key
+google-play-service-account.json
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Build
+application/android/
+application/ios/
 dist/
+build/
 
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-
-.env*
-
+# Logs
+*.log
+npm-debug.log*
