@@ -20,24 +20,35 @@ interface PasswordResetEmailOptions {
 }
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
+  service: 'gmail', 
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, 
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USER || 'codewithdarshan45@gmail.com',
+    pass: process.env.SMTP_PASS || 'hrxn cpni qfmi cbpn',
+  },
+  tls: {
+    rejectUnauthorized: false,
   },
 });
 
-export const sendEmail = async (options: EmailOptions): Promise<void> => {
-  const mailOptions = {
-    from: `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-  };
 
-  await transporter.sendMail(mailOptions);
+export const sendEmail = async (options: EmailOptions): Promise<void> => {
+  try {
+    const mailOptions = {
+      from: `"${process.env.SMTP_FROM_NAME || 'Bethel AG Dubai'}" <${process.env.SMTP_FROM_EMAIL || 'codewithdarshan45@gmail.com'}>`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Email sent successfully:', info.messageId);
+  } catch (error) {
+    console.error('❌ Error sending email:', error);
+    throw error;
+  }
 };
 
 export const sendWelcomeEmail = async (options: WelcomeEmailOptions): Promise<void> => {
