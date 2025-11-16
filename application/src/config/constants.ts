@@ -2,9 +2,6 @@ import Constants from "expo-constants";
 
 const api_url = Constants.expoConfig?.extra?.apiUrl ?? '';
 
-console.log(api_url);
-
-
 export const API_URL = api_url;
 
 export const COLORS = {
