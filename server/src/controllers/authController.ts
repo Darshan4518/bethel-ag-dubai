@@ -58,7 +58,8 @@ export const register = async (req: Request, res: Response) => {
 
     await user.save();
 
-    await sendWelcomeEmail({
+    // Try to send welcome email, but don't fail registration if email fails
+    const emailSent = await sendWelcomeEmail({
       to: user.email,
       name: user.name,
       email: user.email,
@@ -71,7 +72,7 @@ export const register = async (req: Request, res: Response) => {
       { expiresIn: '30d' }
     );
 
-    res.status(201).json({
+    const response: any = {
       token,
       user: {
         _id: user._id,
@@ -79,8 +80,17 @@ export const register = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
       },
-      message: 'User created successfully. Login credentials sent to email.',
-    });
+    };
+
+    if (emailSent as any) {
+      response.message = 'User created successfully. Login credentials sent to email.';
+    } else {
+      response.message = 'User created successfully. Email service unavailable - please contact admin for credentials.';
+      response.warning = 'Email could not be sent';
+      console.warn(`⚠️ Failed to send welcome email to ${user.email}. Temp password: ${generatedPassword}`);
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -142,21 +152,35 @@ export const forgotPassword = async (req: Request, res: Response) => {
     user.resetPasswordExpire = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
 
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    // For mobile apps, use deep link format
+    // Format: yourappname://reset-password?token=xxx
+    const resetUrl = `${process.env.APP_DEEP_LINK_SCHEME || 'bethelapp'}://reset-password?token=${resetToken}`;
 
-    await sendPasswordResetEmail({
+    const emailSent:any = await sendPasswordResetEmail({
       to: user.email,
       name: user.name,
       resetUrl,
     });
 
+    if (!emailSent ) {
+  
+      return res.json({ 
+        success: true,
+        message: 'Email service unavailable. Please use the verification code to reset your password.',
+        resetToken: resetToken, 
+        expiresIn: 600 
+      });
+    }
+
     res.json({
       success: true,
       message: 'Password reset email sent',
+      resetToken: resetToken, 
+      expiresIn: 600
     });
   } catch (error) {
     console.error('Forgot password error:', error);
-    res.status(500).json({ message: 'Error sending email' });
+    res.status(500).json({ message: 'Error processing request' });
   }
 };
 
