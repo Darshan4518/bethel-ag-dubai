@@ -58,7 +58,6 @@ export const register = async (req: Request, res: Response) => {
 
     await user.save();
 
-    // Try to send welcome email, but don't fail registration if email fails
     const emailSent = await sendWelcomeEmail({
       to: user.email,
       name: user.name,
@@ -152,8 +151,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     user.resetPasswordExpire = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
 
-    // For mobile apps, use deep link format
-    // Format: yourappname://reset-password?token=xxx
+ 
     const resetUrl = `${process.env.APP_DEEP_LINK_SCHEME || 'bethelapp'}://reset-password?token=${resetToken}`;
 
     const emailSent:any = await sendPasswordResetEmail({
