@@ -16,8 +16,10 @@ export interface IUser extends Document {
   church?: string;
   avatar?: string;
   pushTokens?: Array<{ token: string; deviceId: string }>;
-  resetPasswordToken?: string;
-  resetPasswordExpire?: Date;
+  resetPasswordOTP?: string;
+  resetPasswordOTPExpire?: Date;
+  resetPasswordAttempts?: number;
+  resetPasswordLastAttempt?: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -40,8 +42,10 @@ const userSchema = new Schema<IUser>(
       token: String,
       deviceId: String,
     }],
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
+    resetPasswordOTP: { type: String, select: false },
+    resetPasswordOTPExpire: { type: Date, select: false },
+    resetPasswordAttempts: { type: Number, default: 0, select: false },
+    resetPasswordLastAttempt: { type: Date, select: false },
   },
   {
     timestamps: true,
@@ -60,6 +64,6 @@ userSchema.methods.comparePassword = async function (
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+userSchema.index({ resetPasswordOTPExpire: 1 }, { expireAfterSeconds: 0 });
+
 export default mongoose.model<IUser>('User', userSchema);
-
-

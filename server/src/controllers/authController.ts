@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { validationResult } from 'express-validator';
 import User from '../models/User';
-import { sendEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
+import { sendEmail, sendWelcomeEmail, sendPasswordResetOTP } from '../utils/email';
 
 const generatePassword = (length: number = 12): string => {
   const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -23,6 +23,10 @@ const generatePassword = (length: number = 12): string => {
   }
   
   return password.split('').sort(() => Math.random() - 0.5).join('');
+};
+
+const generateOTP = (): string => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 export const register = async (req: Request, res: Response) => {
@@ -81,11 +85,12 @@ export const register = async (req: Request, res: Response) => {
       },
     };
 
-    if (emailSent as any) {
+    if (emailSent) {
       response.message = 'User created successfully. Login credentials sent to email.';
     } else {
       response.message = 'User created successfully. Email service unavailable - please contact admin for credentials.';
       response.warning = 'Email could not be sent';
+      response.tempPassword = generatedPassword; 
       console.warn(`⚠️ Failed to send welcome email to ${user.email}. Temp password: ${generatedPassword}`);
     }
 
@@ -141,39 +146,57 @@ export const forgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+resetPasswordAttempts +resetPasswordLastAttempt');
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-    user.resetPasswordExpire = new Date(Date.now() + 10 * 60 * 1000);
-    await user.save();
-
- 
-    const resetUrl = `${process.env.APP_DEEP_LINK_SCHEME || 'bethelapp'}://reset-password?token=${resetToken}`;
-
-    const emailSent:any = await sendPasswordResetEmail({
-      to: user.email,
-      name: user.name,
-      resetUrl,
-    });
-
-    if (!emailSent ) {
-  
       return res.json({ 
         success: true,
-        message: 'Email service unavailable. Please use the verification code to reset your password.',
-        resetToken: resetToken, 
+        message: 'If an account exists with this email, you will receive a password reset code.',
+      });
+    }
+
+    const now = new Date();
+    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    
+    if (user.resetPasswordLastAttempt && user.resetPasswordLastAttempt > fifteenMinutesAgo) {
+      if ((user.resetPasswordAttempts || 0) >= 3) {
+        return res.status(429).json({ 
+          message: 'Too many password reset attempts. Please try again after 15 minutes.',
+          retryAfter: Math.ceil((user.resetPasswordLastAttempt.getTime() + 15 * 60 * 1000 - now.getTime()) / 1000)
+        });
+      }
+    } else {
+      user.resetPasswordAttempts = 0;
+    }
+
+    const otp = generateOTP();
+    
+    user.resetPasswordOTP = crypto.createHash('sha256').update(otp).digest('hex');
+    user.resetPasswordOTPExpire = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1;
+    user.resetPasswordLastAttempt = now;
+    
+    await user.save();
+
+    const emailSent = await sendPasswordResetOTP({
+      to: user.email,
+      name: user.name,
+      otp: otp,
+    });
+
+    if (!emailSent) {
+      console.warn(`⚠️ Failed to send OTP email to ${user.email}. OTP: ${otp}`);
+      
+      return res.json({ 
+        success: true,
+        message: 'Email service unavailable. Please use the verification code below or contact support.',
+        ...(process.env.NODE_ENV === 'development' && { otp: otp }), 
         expiresIn: 600 
       });
     }
 
     res.json({
       success: true,
-      message: 'Password reset email sent',
-      resetToken: resetToken, 
+      message: 'Password reset code sent to your email. Valid for 10 minutes.',
       expiresIn: 600
     });
   } catch (error) {
@@ -182,25 +205,72 @@ export const forgotPassword = async (req: Request, res: Response) => {
   }
 };
 
-export const resetPassword = async (req: Request, res: Response) => {
+export const verifyOTP = async (req: Request, res: Response) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const { email, otp } = req.body;
 
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP are required' });
+    }
+
+    const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
 
     const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpire: { $gt: Date.now() },
-    });
+      email,
+      resetPasswordOTP: hashedOTP,
+      resetPasswordOTPExpire: { $gt: Date.now() },
+    }).select('+resetPasswordOTP +resetPasswordOTPExpire');
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired token' });
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    const resetToken = jwt.sign(
+      { userId: user._id, type: 'password-reset' },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '15m' }
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'OTP verified successfully',
+      resetToken 
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { resetToken, password } = req.body;
+
+    if (!resetToken || !password) {
+      return res.status(400).json({ message: 'Reset token and password are required' });
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET as string);
+      if (decoded.type !== 'password-reset') {
+        throw new Error('Invalid token type');
+      }
+    } catch (error) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    const user = await User.findById(decoded.userId).select('+resetPasswordOTP +resetPasswordOTPExpire');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
     user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
+    user.resetPasswordOTP = undefined;
+    user.resetPasswordOTPExpire = undefined;
+    user.resetPasswordAttempts = 0;
+    user.resetPasswordLastAttempt = undefined;
     await user.save();
 
     await sendEmail({

@@ -13,7 +13,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import apiService from '../../src/services/api';
@@ -21,7 +21,7 @@ import { useTheme } from '../../src/context/ThemeContext';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
-  const { token } = useLocalSearchParams<{ token: string }>();
+  const { resetToken } = useLocalSearchParams<{ resetToken: string }>();
   const { theme, colors } = useTheme();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -29,7 +29,6 @@ export default function ResetPasswordScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
-  const [resetSuccess, setResetSuccess] = useState(false);
 
   const calculatePasswordStrength = (pwd: string) => {
     let strength = 0;
@@ -74,19 +73,29 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    if (!token) {
+    if (!resetToken) {
       Alert.alert('Error', 'Invalid reset token');
       return;
     }
 
     setLoading(true);
     try {
-      await apiService.resetPassword(token as string, password);
-      setResetSuccess(true);
+      await apiService.resetPasswordWithToken(resetToken as string, password);
+      
+      Alert.alert(
+        'Success',
+        'Your password has been reset successfully!',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/(auth)/login')
+          }
+        ]
+      );
     } catch (error: any) {
       Alert.alert(
         'Error',
-        error.response?.data?.message || 'Failed to reset password. The link may have expired.'
+        error.response?.data?.message || 'Failed to reset password'
       );
     } finally {
       setLoading(false);
@@ -94,92 +103,6 @@ export default function ResetPasswordScreen() {
   };
 
   const isDark = theme === 'dark';
-
-  if (resetSuccess) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={isDark 
-            ? ['#0f0f0f', '#1a1a2e', '#16213e']
-            : ['#f5f7fa', '#c3cfe2', '#667eea']
-          }
-          style={StyleSheet.absoluteFillObject}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-
-        <View style={[styles.decorativeOrb1, {
-          backgroundColor: isDark 
-            ? 'rgba(48,209,88,0.15)' 
-            : 'rgba(52,199,89,0.2)',
-        }]} />
-
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.content}
-          >
-            <Animated.View
-              entering={FadeInUp.duration(1000).springify()}
-              style={styles.successContainer}
-            >
-              <LinearGradient
-                colors={['#30D158', '#28A745']}
-                style={styles.successIconContainer}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="checkmark-circle" size={64} color="#FFFFFF" />
-              </LinearGradient>
-              
-              <Text style={[styles.successTitle, { color: colors.text }]}>
-                Password Reset Successful!
-              </Text>
-              
-              <Text style={[styles.successMessage, { color: colors.textSecondary }]}>
-                Your password has been successfully reset. You can now log in with your new password.
-              </Text>
-              
-              <View style={styles.successFeaturesContainer}>
-                <View style={styles.successFeature}>
-                  <View style={[styles.successFeatureIcon, { backgroundColor: `${colors.primary}20` }]}>
-                    <Ionicons name="shield-checkmark" size={24} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.successFeatureText, { color: colors.textSecondary }]}>
-                    Your account is secure
-                  </Text>
-                </View>
-                
-                <View style={styles.successFeature}>
-                  <View style={[styles.successFeatureIcon, { backgroundColor: `${colors.primary}20` }]}>
-                    <Ionicons name="lock-closed" size={24} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.successFeatureText, { color: colors.textSecondary }]}>
-                    Password encrypted
-                  </Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={styles.button}
-                onPress={() => router.replace('/(auth)/login')}
-              >
-                <LinearGradient
-                  colors={isDark ? ['#0A84FF', '#0066CC'] : ['#667eea', '#764ba2']}
-                  style={styles.buttonGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.buttonText}>Continue to Login</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -209,28 +132,6 @@ export default function ResetPasswordScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.content}
         >
-          <Animated.View entering={FadeInUp.duration(600).springify()}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.backButtonWrapper}
-            >
-              <BlurView
-                intensity={isDark ? 15 : 25}
-                tint={isDark ? 'dark' : 'light'}
-                style={[
-                  styles.backButton,
-                  {
-                    borderColor: isDark 
-                      ? 'rgba(255,255,255,0.08)' 
-                      : 'rgba(255,255,255,0.5)',
-                  }
-                ]}
-              >
-                <Ionicons name="arrow-back" size={24} color={colors.text} />
-              </BlurView>
-            </TouchableOpacity>
-          </Animated.View>
-
           <Animated.View
             entering={FadeInDown.delay(200).duration(1000).springify()}
             style={styles.iconContainer}
@@ -472,18 +373,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     justifyContent: 'center',
   },
-  backButtonWrapper: {
-    marginBottom: 24,
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
   iconContainer: {
     alignItems: 'center',
     marginBottom: 32,
@@ -608,55 +497,5 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
-  },
-  successContainer: {
-    alignItems: 'center',
-  },
-  successIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  successTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  successMessage: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
-    paddingHorizontal: 20,
-  },
-  successFeaturesContainer: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 40,
-  },
-  successFeature: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  successFeatureIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  successFeatureText: {
-    fontSize: 13,
-    textAlign: 'center',
   },
 });

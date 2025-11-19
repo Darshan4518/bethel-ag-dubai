@@ -95,6 +95,18 @@ class ApiService {
     await AsyncStorage.removeItem("authToken");
   }
 
+  async verifyOTP(email: string, otp: string): Promise<any> {
+    const { data } = await this.api.post("/auth/verify-otp", { email, otp });
+    return data;
+  }
+
+  async resetPasswordWithToken(resetToken: string, password: string) {
+    const { data } = await this.api.post("/auth/reset-password", {
+      resetToken,
+      password,
+    });
+    return data;
+  }
   async getProfile(): Promise<User> {
     const { data } = await this.api.get<User>("/users/profile");
     return data;

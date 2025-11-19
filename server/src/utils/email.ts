@@ -13,10 +13,10 @@ interface WelcomeEmailOptions {
   password: string;
 }
 
-interface PasswordResetOptions {
+interface PasswordResetOTPOptions {
   to: string;
   name: string;
-  resetUrl: string;
+  otp: string;
 }
 
 const createTransporter = () => {
@@ -28,22 +28,31 @@ const createTransporter = () => {
     return null;
   }
 
-  return nodemailer.createTransport({
+  const config: any = {
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT || '587'),
-    secure: process.env.EMAIL_PORT === '465', 
+    secure: process.env.EMAIL_PORT === '465',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD,
     },
-    connectionTimeout: 10000, 
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    tls: {
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+  };
+
+  if (process.env.EMAIL_PORT !== '465') {
+    config.tls = {
       rejectUnauthorized: process.env.NODE_ENV === 'production',
-      ciphers: 'SSLv3'
-    },
-  });
+      minVersion: 'TLSv1.2'
+    };
+  }
+
+  config.pool = true;
+  config.maxConnections = 5;
+  config.maxMessages = 10;
+
+  return nodemailer.createTransport(config);
 };
 
 export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
@@ -52,6 +61,14 @@ export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
     
     if (!transporter) {
       console.error('❌ Email transporter not configured properly');
+      return false;
+    }
+
+    try {
+      await transporter.verify();
+      console.log('✅ SMTP connection verified');
+    } catch (verifyError) {
+      console.error('❌ SMTP verification failed:', verifyError);
       return false;
     }
 
@@ -64,6 +81,9 @@ export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log('✅ Email sent successfully:', info.messageId);
+    
+    transporter.close();
+    
     return true;
   } catch (error: any) {
     console.error('❌ Error sending email:', error);
@@ -71,6 +91,7 @@ export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
       code: error.code,
       command: error.command,
       message: error.message,
+      response: error.response,
     });
     return false;
   }
@@ -109,12 +130,6 @@ export const sendWelcomeEmail = async (options: WelcomeEmailOptions): Promise<bo
           </p>
         </div>
         
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${process.env.FRONTEND_URL || 'https://yourdomain.com'}/login" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-            Login to Your Account
-          </a>
-        </div>
-        
         <div style="text-align: center; margin-top: 40px; padding-top: 30px; border-top: 1px solid #eee;">
           <p style="color: #999; font-size: 13px; margin: 0;">
             © ${new Date().getFullYear()} Bethel AG Dubai. All rights reserved.
@@ -131,12 +146,7 @@ export const sendWelcomeEmail = async (options: WelcomeEmailOptions): Promise<bo
   });
 };
 
-export const sendPasswordResetEmail = async (options: PasswordResetOptions): Promise<boolean> => {
-  // Extract token from deep link URL if present
-  const token = options.resetUrl.includes('token=') 
-    ? options.resetUrl.split('token=')[1] 
-    : '';
-  
+export const sendPasswordResetOTP = async (options: PasswordResetOTPOptions): Promise<boolean> => {
   const html = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; border-radius: 20px;">
       <div style="background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
@@ -159,35 +169,23 @@ export const sendPasswordResetEmail = async (options: PasswordResetOptions): Pro
           <p style="color: #333; font-size: 14px; margin: 0 0 10px 0;">
             <strong>Verification Code:</strong>
           </p>
-          <p style="color: #333; font-size: 32px; margin: 0; font-family: monospace; letter-spacing: 4px; font-weight: bold;">
-            ${token.substring(0, 8).toUpperCase()}
+          <p style="color: #333; font-size: 48px; margin: 0; font-family: monospace; letter-spacing: 8px; font-weight: bold;">
+            ${options.otp}
           </p>
           <p style="color: #666; font-size: 12px; margin: 10px 0 0 0;">
             Enter this code in the app to reset your password
           </p>
         </div>
         
-        ${options.resetUrl.startsWith('http') ? `
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${options.resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-            Reset Password
-          </a>
-        </div>
-        ` : `
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${options.resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-            Open in App
-          </a>
-        </div>
-        `}
-        
         <div style="background: #fff3cd; padding: 20px; border-radius: 12px; margin-bottom: 30px; border-left: 4px solid #ffc107;">
           <p style="color: #856404; font-size: 14px; margin: 0 0 10px 0; line-height: 1.6;">
             <strong>Security Notice:</strong>
           </p>
-          <p style="color: #856404; font-size: 14px; margin: 0; line-height: 1.6;">
-            This code will expire in 10 minutes. If you didn't request this reset, please ignore this email and your password will remain unchanged.
-          </p>
+          <ul style="color: #856404; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.6;">
+            <li>This code will expire in 10 minutes</li>
+            <li>Never share this code with anyone</li>
+            <li>If you didn't request this reset, please ignore this email</li>
+          </ul>
         </div>
         
         <div style="text-align: center; margin-top: 40px; padding-top: 30px; border-top: 1px solid #eee;">
@@ -201,7 +199,7 @@ export const sendPasswordResetEmail = async (options: PasswordResetOptions): Pro
 
   return sendEmail({
     to: options.to,
-    subject: 'Password Reset Request - Bethel AG Dubai',
+    subject: 'Password Reset OTP - Bethel AG Dubai',
     html,
   });
 };

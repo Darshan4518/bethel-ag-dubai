@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -19,37 +19,70 @@ import { BlurView } from 'expo-blur';
 import apiService from '../../src/services/api';
 import { useTheme } from '../../src/context/ThemeContext';
 
-export default function ForgotPasswordScreen() {
+export default function VerifyOTPScreen() {
   const router = useRouter();
+  const { email } = useLocalSearchParams<{ email: string }>();
   const { theme, colors } = useTheme();
-  const [email, setEmail] = useState('');
+  
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [timer, setTimer] = useState(600); 
+  const inputRefs = useRef<Array<TextInput | null>>([]);
 
-  const handleSendOTP = async () => {
-    if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email');
-      return;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimer((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleOtpChange = (value: string, index: number) => {
+    if (!/^\d*$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
     }
+  };
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+  const handleKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    const otpCode = otp.join('');
+    
+    if (otpCode.length !== 6) {
+      Alert.alert('Error', 'Please enter the complete 6-digit code');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await apiService.forgotPassword(email);
+      const response = await apiService.verifyOTP(email as string, otpCode);
       
       Alert.alert(
         'Success',
-        'A verification code has been sent to your email',
+        'OTP verified successfully',
         [
           {
             text: 'OK',
             onPress: () => router.push({
-              pathname: '/(auth)/verify-otp',
-              params: { email }
+              pathname: '/(auth)/reset-password-new',
+              params: { resetToken: response.data.resetToken }
             })
           }
         ]
@@ -57,10 +90,27 @@ export default function ForgotPasswordScreen() {
     } catch (error: any) {
       Alert.alert(
         'Error',
-        error.response?.data?.message || 'Failed to send verification code. Please try again.'
+        error.response?.data?.message || 'Invalid or expired OTP'
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    setResending(true);
+    try {
+      await apiService.forgotPassword(email as string);
+      setTimer(600);
+      setOtp(['', '', '', '', '', '']);
+      Alert.alert('Success', 'A new verification code has been sent to your email');
+    } catch (error: any) {
+      Alert.alert(
+        'Error',
+        error.response?.data?.message || 'Failed to resend code'
+      );
+    } finally {
+      setResending(false);
     }
   };
 
@@ -82,11 +132,6 @@ export default function ForgotPasswordScreen() {
         backgroundColor: isDark 
           ? 'rgba(10,132,255,0.15)' 
           : 'rgba(102,126,234,0.2)',
-      }]} />
-      <View style={[styles.decorativeOrb2, {
-        backgroundColor: isDark 
-          ? 'rgba(118,75,162,0.15)' 
-          : 'rgba(118,75,162,0.2)',
       }]} />
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -126,7 +171,7 @@ export default function ForgotPasswordScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Ionicons name="mail" size={48} color="#FFFFFF" />
+              <Ionicons name="shield-checkmark" size={48} color="#FFFFFF" />
             </LinearGradient>
           </Animated.View>
 
@@ -134,69 +179,69 @@ export default function ForgotPasswordScreen() {
             entering={FadeInDown.delay(400).duration(1000).springify()}
             style={[styles.title, { color: colors.text }]}
           >
-            Forgot Password?
+            Verify Your Email
           </Animated.Text>
 
           <Animated.Text
             entering={FadeInDown.delay(500).duration(1000).springify()}
             style={[styles.subtitle, { color: colors.textSecondary }]}
           >
-            Enter your email address and we'll send you a verification code to reset your password
+            Enter the 6-digit code sent to{'\n'}
+            <Text style={{ fontWeight: '600' }}>{email}</Text>
           </Animated.Text>
 
           <Animated.View
             entering={FadeInDown.delay(600).duration(1000).springify()}
-            style={styles.inputContainer}
+            style={styles.otpContainer}
           >
-            <BlurView
-              intensity={isDark ? 15 : 25}
-              tint={isDark ? 'dark' : 'light'}
-              style={[
-                styles.inputWrapper,
-                {
-                  borderColor: isDark 
-                    ? 'rgba(255,255,255,0.08)' 
-                    : 'rgba(255,255,255,0.5)',
-                }
-              ]}
-            >
-              <View style={[styles.inputIconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                <Ionicons name="mail-outline" size={20} color={colors.primary} />
-              </View>
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Email Address"
-                placeholderTextColor={colors.textSecondary}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </BlurView>
+            {otp.map((digit, index) => (
+              <BlurView
+                key={index}
+                intensity={isDark ? 15 : 25}
+                tint={isDark ? 'dark' : 'light'}
+                style={[
+                  styles.otpInputWrapper,
+                  {
+                    borderColor: digit 
+                      ? colors.primary 
+                      : isDark 
+                        ? 'rgba(255,255,255,0.08)' 
+                        : 'rgba(255,255,255,0.5)',
+                    borderWidth: digit ? 2 : 1,
+                  }
+                ]}
+              >
+                <TextInput
+                  ref={(ref) => {
+                    inputRefs.current[index] = ref;
+                  }}
+                  style={[styles.otpInput, { color: colors.text }]}
+                  value={digit}
+                  onChangeText={(value) => handleOtpChange(value, index)}
+                  onKeyPress={(e) => handleKeyPress(e, index)}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  selectTextOnFocus
+                />
+              </BlurView>
+            ))}
           </Animated.View>
 
           <Animated.View
             entering={FadeInDown.delay(700).duration(1000).springify()}
-            style={styles.infoContainer}
+            style={styles.timerContainer}
           >
-            <BlurView
-              intensity={isDark ? 10 : 20}
-              tint={isDark ? 'dark' : 'light'}
-              style={[
-                styles.infoBox,
-                {
-                  borderColor: isDark 
-                    ? 'rgba(255,255,255,0.05)' 
-                    : 'rgba(255,255,255,0.4)',
-                }
-              ]}
-            >
-              <Ionicons name="information-circle" size={24} color={colors.primary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                You'll receive a 6-digit verification code via email. The code will be valid for 10 minutes.
-              </Text>
-            </BlurView>
+            <Ionicons 
+              name="time-outline" 
+              size={20} 
+              color={timer > 60 ? colors.primary : '#FF3B30'} 
+            />
+            <Text style={[
+              styles.timerText, 
+              { color: timer > 60 ? colors.textSecondary : '#FF3B30' }
+            ]}>
+              Code expires in {formatTime(timer)}
+            </Text>
           </Animated.View>
 
           <Animated.View
@@ -205,7 +250,7 @@ export default function ForgotPasswordScreen() {
           >
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleSendOTP}
+              onPress={handleVerifyOTP}
               disabled={loading}
             >
               <LinearGradient
@@ -218,8 +263,8 @@ export default function ForgotPasswordScreen() {
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
-                    <Text style={styles.buttonText}>Send Code</Text>
-                    <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+                    <Text style={styles.buttonText}>Verify Code</Text>
+                    <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
                   </>
                 )}
               </LinearGradient>
@@ -231,11 +276,20 @@ export default function ForgotPasswordScreen() {
             style={styles.footer}
           >
             <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-              Remember your password?{' '}
+              Didn't receive the code?{' '}
             </Text>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>
-                Back to Login
+            <TouchableOpacity 
+              onPress={handleResendOTP} 
+              disabled={resending || timer > 540}
+            >
+              <Text style={[
+                styles.footerLink, 
+                { 
+                  color: resending || timer > 540 ? colors.textSecondary : colors.primary,
+                  opacity: resending || timer > 540 ? 0.5 : 1
+                }
+              ]}>
+                {resending ? 'Sending...' : 'Resend'}
               </Text>
             </TouchableOpacity>
           </Animated.View>
@@ -259,14 +313,6 @@ const styles = StyleSheet.create({
     borderRadius: 175,
     top: -100,
     right: -100,
-  },
-  decorativeOrb2: {
-    position: 'absolute',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    bottom: -80,
-    left: -80,
   },
   content: {
     flex: 1,
@@ -312,49 +358,40 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 32,
+    marginBottom: 40,
     paddingHorizontal: 20,
   },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputWrapper: {
+  otpContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    height: 60,
-    overflow: 'hidden',
-  },
-  inputIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-  },
-  infoContainer: {
+    gap: 12,
     marginBottom: 24,
   },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
+  otpInputWrapper: {
+    width: 50,
+    height: 60,
+    borderRadius: 12,
     overflow: 'hidden',
-    gap: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
+  otpInput: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  timerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 32,
+  },
+  timerText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   buttonContainer: {
     marginBottom: 24,
